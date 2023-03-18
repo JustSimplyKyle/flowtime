@@ -129,17 +129,6 @@ impl Timer {
         }
     }
 
-    fn set_time(&mut self, t: Time) {
-        match self.mode {
-            Mode::Clock => panic!("Can't set time on clock mode"),
-            Mode::CountDown => self
-                .time
-                .set_time_by_second(t.second + t.minutes * 60 + t.hour * 3600),
-            Mode::Stop => panic!("Can't set time with Stops"),
-            Mode::Pause(_) => panic!("Can't set time with Pauses"),
-        }
-    }
-
     fn formatted_string(&self) -> String {
         self.time.formatted_string()
     }
