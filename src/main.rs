@@ -93,27 +93,32 @@ enum Mode {
     Stop,
     Pause(Box<Mode>),
 }
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 struct Timer {
     mode: Mode,
     time: Time,
     clicking: bool,
+    restart: bool,
 }
 impl Timer {
-    fn new(mode: Mode) -> Self {
-        Self {
-            mode,
-            time: Time::default(),
+    fn new() -> Timer {
+        Timer {
+            mode: Mode::Stop,
+            time: Default::default(),
             clicking: false,
+            restart: false,
         }
     }
-
     fn tick(&mut self) {
         match self.mode {
             Mode::Clock => self.time.increment_second(),
             Mode::CountDown => {
                 if self.time.second == 0 && self.time.minutes == 0 && self.time.hour == 0 {
-                    self.mode = Mode::Stop;
+                    if self.restart {
+                        self.mode = Mode::Clock;
+                    } else {
+                        self.mode = Mode::Stop;
+                    }
                     self.clicking = false;
                     self.time.reset_time();
                 } else {
@@ -145,6 +150,7 @@ impl Timer {
 enum TimerMsg {
     ToggleFlowTime,
     ToggleBreak,
+    SetRestart(bool),
 }
 
 #[derive(Debug)]
@@ -215,11 +221,11 @@ impl Component for Timer {
     }
     // Initialize the UI.
     fn init(
-        mode: Self::Init,
+        _mode: Self::Init,
         root: &Self::Root,
         sender: ComponentSender<Self>,
     ) -> ComponentParts<Self> {
-        let model = Timer::new(mode);
+        let model = Timer::new();
         relm4::set_global_css(
             r#"
             .clock {
@@ -282,6 +288,10 @@ impl Component for Timer {
                     self.mode = *x.clone();
                 }
             },
+            TimerMsg::SetRestart(x) => {
+                self.restart = x;
+                dbg!(&self);
+            }
         }
     }
     fn update_cmd(
@@ -357,6 +367,45 @@ impl SimpleComponent for HeaderModel {
     ) -> ComponentParts<Self> {
         let model = HeaderModel;
         let widgets = view_output!();
+
+        ComponentParts { model, widgets }
+    }
+}
+
+#[derive(Debug, Clone)]
+struct SettingsModel;
+
+#[derive(Debug)]
+enum SettingsMsg {
+    AutoRestart(bool),
+}
+
+#[relm4::component]
+impl SimpleComponent for SettingsModel {
+    type Input = ();
+    type Init = ();
+    type Output = SettingsMsg;
+
+    view! {
+        gtk::Box {
+            set_spacing: 10,
+            gtk::Switch {
+                connect_state_notify[sender] => move |switch| {
+                    sender.output(SettingsMsg::AutoRestart(switch.is_active())).unwrap();
+                },
+            },
+            gtk::Label {
+                set_label: "Auto start Flowtime session after the break has ended."
+            }
+        }
+    }
+    fn init(
+        _params: Self::Init,
+        root: &Self::Root,
+        sender: ComponentSender<Self>,
+    ) -> ComponentParts<Self> {
+        let model = SettingsModel;
+        let widgets = view_output!();
         ComponentParts { model, widgets }
     }
 }
@@ -370,12 +419,14 @@ enum AppMode {
 #[derive(Debug)]
 enum MainAppMsg {
     SetMode(AppMode),
+    SetRestart(bool),
 }
 
 struct MainApp {
     mode: AppMode,
     header: Controller<HeaderModel>,
     main: Controller<Timer>,
+    setting: Controller<SettingsModel>,
 }
 
 #[relm4::component]
@@ -396,6 +447,11 @@ impl SimpleComponent for MainApp {
                     #[watch]
                     set_visible: matches!(model.mode, AppMode::FlowTime),
                     model.main.widget(),
+                },
+                gtk::Box {
+                    #[watch]
+                    set_visible: matches!(model.mode, AppMode::Settings),
+                    model.setting.widget(),
                 }
             }
         }
@@ -415,6 +471,11 @@ impl SimpleComponent for MainApp {
                 },
             ),
             main: Timer::builder().launch(Mode::Stop).detach(),
+            setting: SettingsModel::builder()
+                .launch(())
+                .forward(sender.input_sender(), |msg| match msg {
+                    SettingsMsg::AutoRestart(x) => MainAppMsg::SetRestart(x),
+                }),
         };
         let widgets = view_output!();
         ComponentParts { model, widgets }
@@ -424,6 +485,7 @@ impl SimpleComponent for MainApp {
             MainAppMsg::SetMode(mode) => {
                 self.mode = mode;
             }
+            MainAppMsg::SetRestart(x) => self.main.sender().send(TimerMsg::SetRestart(x)).unwrap(),
         }
     }
 }
