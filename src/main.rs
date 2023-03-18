@@ -291,7 +291,6 @@ impl Component for Timer {
             },
             TimerMsg::SetRestart(x) => {
                 self.restart = x;
-                dbg!(&self);
             }
         }
     }
