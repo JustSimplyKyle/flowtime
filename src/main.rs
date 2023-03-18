@@ -284,9 +284,23 @@ impl Component for Timer {
                 Mode::CountDown => {
                     self.mode = Mode::Pause(Box::from(Mode::CountDown));
                 }
-                Mode::Pause(x) => {
-                    self.mode = *x.clone();
-                }
+                Mode::Pause(x) => match **x {
+                    Mode::Clock => {
+                        self.mode = Mode::Clock;
+                        if !self.clicking {
+                            sender.spawn_oneshot_command(|| CommandMsg::Tick);
+                            self.clicking = true;
+                        }
+                    }
+                    Mode::CountDown => {
+                        self.mode = Mode::CountDown;
+                        if !self.clicking {
+                            sender.spawn_oneshot_command(|| CommandMsg::Tick);
+                            self.clicking = true;
+                        }
+                    }
+                    _ => unreachable!(),
+                },
             },
             TimerMsg::SetRestart(x) => {
                 self.restart = x;
@@ -307,11 +321,13 @@ impl Component for Timer {
                     && self.mode != Mode::Pause(Box::from(Mode::CountDown))
                 {
                     self.tick();
-                    sender.spawn_oneshot_command(|| {
-                        std::thread::sleep(Duration::from_millis(1000));
-                        CommandMsg::Tick
-                    });
+                } else {
+                    dbg!(&self.mode);
                 }
+                sender.spawn_oneshot_command(|| {
+                    std::thread::sleep(Duration::from_millis(1000));
+                    CommandMsg::Tick
+                });
             }
         };
     }
