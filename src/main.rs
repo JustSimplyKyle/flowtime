@@ -119,7 +119,6 @@ impl Timer {
                     } else {
                         self.mode = Mode::Stop;
                     }
-                    self.clicking = false;
                     self.time.reset_time();
                 } else {
                     self.time.decrement_second()
@@ -262,10 +261,6 @@ impl Component for Timer {
                 Mode::Clock | Mode::Pause(_) | Mode::Stop => {
                     self.mode = Mode::CountDown;
                     self.time.set_time_by_second(self.time.get_second() / 5);
-                    if !self.clicking {
-                        sender.spawn_oneshot_command(|| CommandMsg::Tick);
-                        self.clicking = true;
-                    }
                 }
                 _ => (),
             },
@@ -287,17 +282,9 @@ impl Component for Timer {
                 Mode::Pause(x) => match **x {
                     Mode::Clock => {
                         self.mode = Mode::Clock;
-                        if !self.clicking {
-                            sender.spawn_oneshot_command(|| CommandMsg::Tick);
-                            self.clicking = true;
-                        }
                     }
                     Mode::CountDown => {
                         self.mode = Mode::CountDown;
-                        if !self.clicking {
-                            sender.spawn_oneshot_command(|| CommandMsg::Tick);
-                            self.clicking = true;
-                        }
                     }
                     _ => unreachable!(),
                 },
@@ -316,14 +303,8 @@ impl Component for Timer {
     ) {
         match message {
             CommandMsg::Tick => {
-                if self.mode != Mode::Stop
-                    && self.mode != Mode::Pause(Box::from(Mode::Clock))
-                    && self.mode != Mode::Pause(Box::from(Mode::CountDown))
-                {
-                    self.tick();
-                } else {
-                    dbg!(&self.mode);
-                }
+                // ticking logic handled by Timer
+                self.tick();
                 sender.spawn_oneshot_command(|| {
                     std::thread::sleep(Duration::from_millis(1000));
                     CommandMsg::Tick
