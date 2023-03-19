@@ -262,6 +262,7 @@ struct HeaderModel;
 enum HeaderOutput {
     FlowTime,
     Settings,
+    Statistics,
 }
 
 #[relm4::component]
@@ -293,6 +294,15 @@ impl SimpleComponent for HeaderModel {
                     connect_toggled[sender] => move |btn| {
                         if btn.is_active() {
                             sender.output(HeaderOutput::Settings).unwrap()
+                        }
+                    },
+                },
+                gtk::ToggleButton {
+                    set_label: "Statistics",
+                    set_group: Some(&group),
+                    connect_toggled[sender] => move |btn| {
+                        if btn.is_active() {
+                            sender.output(HeaderOutput::Statistics).unwrap()
                         }
                     },
                 },
@@ -355,6 +365,7 @@ impl SimpleComponent for SettingsModel {
 enum AppMode {
     FlowTime,
     Settings,
+    Statistics,
 }
 
 #[derive(Debug)]
@@ -409,6 +420,7 @@ impl SimpleComponent for MainApp {
                 |msg| match msg {
                     HeaderOutput::FlowTime => MainAppMsg::SetMode(AppMode::FlowTime),
                     HeaderOutput::Settings => MainAppMsg::SetMode(AppMode::Settings),
+                    HeaderOutput::Statistics => MainAppMsg::SetMode(AppMode::Statistics),
                 },
             ),
             main: Timer::builder().launch(TimerMode::Stop).detach(),
