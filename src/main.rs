@@ -113,7 +113,7 @@ impl Timer {
             mode: Mode::Stop,
             time: Default::default(),
             clicking: false,
-            restart: false,
+            restart: CFG.restart,
         }
     }
     fn tick(&mut self) -> bool {
@@ -397,7 +397,9 @@ impl SimpleComponent for SettingsModel {
         gtk::Box {
             set_spacing: 10,
             gtk::Switch {
+                set_active: CFG.restart,
                 connect_state_notify[sender] => move |switch| {
+                confy::store("flowtime", None, Config { restart: switch.is_active() }).unwrap();
                     sender.output(SettingsMsg::AutoRestart(switch.is_active())).unwrap();
                 },
             },
@@ -495,6 +497,18 @@ impl SimpleComponent for MainApp {
             MainAppMsg::SetRestart(x) => self.main.sender().send(TimerMsg::SetRestart(x)).unwrap(),
         }
     }
+}
+
+use serde_derive::{Deserialize, Serialize};
+#[derive(Default, Serialize, Deserialize)]
+struct Config {
+    restart: bool,
+}
+
+use lazy_static::lazy_static;
+
+lazy_static! {
+    static ref CFG: Config = confy::load("flowtime", None).unwrap();
 }
 
 fn main() {
