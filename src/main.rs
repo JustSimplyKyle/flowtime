@@ -399,7 +399,7 @@ impl SimpleComponent for SettingsModel {
             gtk::Switch {
                 set_active: CFG.restart,
                 connect_state_notify[sender] => move |switch| {
-                confy::store("flowtime", None, Config { restart: switch.is_active() }).unwrap();
+                confy::store("flowtime", Some("flowtime"), Config { restart: switch.is_active() }).unwrap();
                     sender.output(SettingsMsg::AutoRestart(switch.is_active())).unwrap();
                 },
             },
@@ -508,7 +508,7 @@ struct Config {
 use lazy_static::lazy_static;
 
 lazy_static! {
-    static ref CFG: Config = confy::load("flowtime", None).unwrap();
+    static ref CFG: Config = confy::load("flowtime", Some("flowtime")).unwrap();
 }
 
 fn main() {
