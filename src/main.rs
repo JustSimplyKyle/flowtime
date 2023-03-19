@@ -6,6 +6,8 @@
 //     QueueableCommand,
 // };
 // use gtk::prelude::{BoxExt, ButtonExt, GtkWindowExt, OrientableExt, WidgetExt};
+pub mod time;
+pub use crate::time::Time;
 use gtk::prelude::*;
 use relm4::*;
 use rodio::Sink;
@@ -22,87 +24,17 @@ use std::time::Duration;
 // use std::io::{stdout, Write};
 // use std::thread::sleep;
 
-#[derive(Default, Debug, Clone)]
-struct Time {
-    second: u16,
-    minutes: u16,
-    hour: u16,
-}
-
-impl Time {
-    fn increment_second(&mut self) {
-        self.second += 1;
-        self.check_carry();
-    }
-    fn check_carry(&mut self) {
-        if self.second == 59 {
-            self.second = 0;
-            self.minutes += 1;
-        }
-        if self.minutes == 59 {
-            self.minutes = 0;
-            self.hour += 1;
-        }
-        if self.hour == 23 {
-            self.hour = 0;
-        }
-    }
-    fn decrement_second(&mut self) {
-        if self.second == 0 && self.minutes > 0 {
-            self.second = 59;
-            self.minutes -= 1;
-        } else if self.minutes == 0 && self.hour > 0 {
-            self.minutes = 59;
-            self.hour -= 1;
-        } else {
-            self.second -= 1;
-        }
-    }
-    fn formatted_string(&self) -> String {
-        let mut output = String::new();
-        if self.hour < 10 {
-            output.push_str(&format!("0{}:", self.hour));
-        } else {
-            output.push_str(&format!("{}:", self.hour));
-        }
-        if self.minutes < 10 {
-            output.push_str(format!("0{}:", self.minutes).as_str());
-        } else {
-            output.push_str(&format!("{}:", self.minutes));
-        }
-        if self.second < 10 {
-            output.push_str(format!("0{}", self.second).as_str());
-        } else {
-            output.push_str(&format!("{}", self.second));
-        }
-        output
-    }
-    fn set_time_by_second(&mut self, seconds: u16) {
-        self.hour = seconds / 3600;
-        self.minutes = (seconds % 3600) / 60;
-        self.second = seconds % 60;
-    }
-    fn get_second(&self) -> u16 {
-        self.second + self.minutes * 60 + self.hour * 3600
-    }
-    fn reset_time(&mut self) {
-        self.second = 0;
-        self.minutes = 0;
-        self.hour = 0;
-    }
-}
-
 #[derive(PartialEq, Debug, Clone)]
-enum Mode {
+enum TimerMode {
     Clock,
     CountDown,
     Stop,
-    Pause(Box<Mode>),
+    Pause(Box<TimerMode>),
 }
 
 #[derive(Debug)]
 struct Timer {
-    mode: Mode,
+    mode: TimerMode,
     time: Time,
     clicking: bool,
     restart: bool,
@@ -110,7 +42,7 @@ struct Timer {
 impl Timer {
     fn new() -> Timer {
         Timer {
-            mode: Mode::Stop,
+            mode: TimerMode::Stop,
             time: Default::default(),
             clicking: false,
             restart: CFG.restart,
@@ -118,16 +50,16 @@ impl Timer {
     }
     fn tick(&mut self) -> bool {
         match self.mode {
-            Mode::Clock => {
+            TimerMode::Clock => {
                 self.time.increment_second();
                 false
             }
-            Mode::CountDown => {
+            TimerMode::CountDown => {
                 if self.time.second == 0 && self.time.minutes == 0 && self.time.hour == 0 {
                     if self.restart {
-                        self.mode = Mode::Clock;
+                        self.mode = TimerMode::Clock;
                     } else {
-                        self.mode = Mode::Stop;
+                        self.mode = TimerMode::Stop;
                     }
                     true
                 } else {
@@ -135,8 +67,8 @@ impl Timer {
                     false
                 }
             }
-            Mode::Stop => false,
-            Mode::Pause(_) => false,
+            TimerMode::Stop => false,
+            TimerMode::Pause(_) => false,
         }
     }
 
@@ -160,7 +92,7 @@ enum CommandMsg {
 
 #[relm4::component]
 impl Component for Timer {
-    type Init = Mode;
+    type Init = TimerMode;
     type Input = TimerMsg;
     type Output = ();
     type CommandOutput = CommandMsg;
@@ -175,17 +107,17 @@ impl Component for Timer {
             gtk::Label {
                 add_css_class: "mode",
                 #[watch]
-                set_visible: !matches!(&model.mode, Mode::Stop),
+                set_visible: !matches!(&model.mode, TimerMode::Stop),
                 #[watch]
                 set_label: match &model.mode {
-                    Mode::Clock => "Working Stage",
-                    Mode::CountDown => "Free Time!",
-                    Mode::Stop => "",
-                    Mode::Pause(x) => match **x {
-                        Mode::Clock => "Working Stage",
-                        Mode::CountDown => "Free Time!",
-                        Mode::Stop => "",
-                        Mode::Pause(_) => "",
+                    TimerMode::Clock => "Working Stage",
+                    TimerMode::CountDown => "Free Time!",
+                    TimerMode::Stop => "",
+                    TimerMode::Pause(x) => match **x {
+                        TimerMode::Clock => "Working Stage",
+                        TimerMode::CountDown => "Free Time!",
+                        TimerMode::Stop => "",
+                        TimerMode::Pause(_) => "",
                     },
                 },
             },
@@ -211,7 +143,7 @@ impl Component for Timer {
                     add_css_class: "flowtimetoggle",
                     #[watch]
                     set_label: match &model.mode {
-                        Mode::Stop | Mode::Pause(_) => "",
+                        TimerMode::Stop | TimerMode::Pause(_) => "",
                         _ => "󰏤"
                     },
                     connect_clicked => TimerMsg::ToggleFlowTime,
@@ -259,33 +191,33 @@ impl Component for Timer {
     fn update(&mut self, msg: Self::Input, sender: ComponentSender<Self>, _: &Self::Root) {
         match msg {
             TimerMsg::ToggleBreak => match &self.mode {
-                Mode::Clock | Mode::Pause(_) | Mode::Stop => {
-                    self.mode = Mode::CountDown;
+                TimerMode::Clock | TimerMode::Pause(_) | TimerMode::Stop => {
+                    self.mode = TimerMode::CountDown;
                     self.time.set_time_by_second(self.time.get_second() / 5);
                 }
                 _ => (),
             },
             TimerMsg::ToggleFlowTime => match &self.mode {
-                Mode::Stop => {
-                    self.mode = Mode::Clock;
+                TimerMode::Stop => {
+                    self.mode = TimerMode::Clock;
                     self.time.reset_time();
                     if !self.clicking {
                         sender.spawn_oneshot_command(|| CommandMsg::Tick);
                         self.clicking = true;
                     }
                 }
-                Mode::Clock => {
-                    self.mode = Mode::Pause(Box::from(Mode::Clock));
+                TimerMode::Clock => {
+                    self.mode = TimerMode::Pause(Box::from(TimerMode::Clock));
                 }
-                Mode::CountDown => {
-                    self.mode = Mode::Pause(Box::from(Mode::CountDown));
+                TimerMode::CountDown => {
+                    self.mode = TimerMode::Pause(Box::from(TimerMode::CountDown));
                 }
-                Mode::Pause(x) => match **x {
-                    Mode::Clock => {
-                        self.mode = Mode::Clock;
+                TimerMode::Pause(x) => match **x {
+                    TimerMode::Clock => {
+                        self.mode = TimerMode::Clock;
                     }
-                    Mode::CountDown => {
-                        self.mode = Mode::CountDown;
+                    TimerMode::CountDown => {
+                        self.mode = TimerMode::CountDown;
                     }
                     _ => unreachable!(),
                 },
@@ -479,7 +411,7 @@ impl SimpleComponent for MainApp {
                     HeaderOutput::Settings => MainAppMsg::SetMode(AppMode::Settings),
                 },
             ),
-            main: Timer::builder().launch(Mode::Stop).detach(),
+            main: Timer::builder().launch(TimerMode::Stop).detach(),
             setting: SettingsModel::builder()
                 .launch(())
                 .forward(sender.input_sender(), |msg| match msg {
