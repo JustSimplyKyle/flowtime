@@ -10,3 +10,4 @@ anyhow = "1.0.69"
 crossterm = "0.26.1"
 relm4 = { version = "0.5.1", features = ["libadwaita"] }
 relm4-components = "0.5.1"
+rodio = "0.17.1"

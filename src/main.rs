@@ -8,6 +8,12 @@
 // use gtk::prelude::{BoxExt, ButtonExt, GtkWindowExt, OrientableExt, WidgetExt};
 use gtk::prelude::*;
 use relm4::*;
+use rodio::Sink;
+use rodio::{Decoder, OutputStream};
+
+use std::fs::File;
+use std::io::BufReader;
+
 // use relm4::{
 //     gtk, Component, ComponentParts, ComponentSender, Controller, RelmApp, RelmWidgetExt,
 //     SimpleComponent,
@@ -93,6 +99,7 @@ enum Mode {
     Stop,
     Pause(Box<Mode>),
 }
+
 #[derive(Debug)]
 struct Timer {
     mode: Mode,
@@ -109,9 +116,12 @@ impl Timer {
             restart: false,
         }
     }
-    fn tick(&mut self) {
+    fn tick(&mut self) -> bool {
         match self.mode {
-            Mode::Clock => self.time.increment_second(),
+            Mode::Clock => {
+                self.time.increment_second();
+                false
+            }
             Mode::CountDown => {
                 if self.time.second == 0 && self.time.minutes == 0 && self.time.hour == 0 {
                     if self.restart {
@@ -119,13 +129,14 @@ impl Timer {
                     } else {
                         self.mode = Mode::Stop;
                     }
-                    self.time.reset_time();
+                    true
                 } else {
-                    self.time.decrement_second()
+                    self.time.decrement_second();
+                    false
                 }
             }
-            Mode::Stop => {}
-            Mode::Pause(_) => {}
+            Mode::Stop => false,
+            Mode::Pause(_) => false,
         }
     }
 
@@ -144,6 +155,7 @@ enum TimerMsg {
 #[derive(Debug)]
 enum CommandMsg {
     Tick,
+    Empty,
 }
 
 #[relm4::component]
@@ -289,15 +301,25 @@ impl Component for Timer {
         sender: ComponentSender<Self>,
         _root: &Self::Root,
     ) {
-        match message {
-            CommandMsg::Tick => {
-                // ticking logic handled by Timer
-                self.tick();
-                sender.spawn_oneshot_command(|| {
-                    std::thread::sleep(Duration::from_millis(1000));
-                    CommandMsg::Tick
+        if let CommandMsg::Tick = message {
+            // ticking logic handled by Timer
+            if self.tick() {
+                sender.spawn_oneshot_command(move || {
+                    let (_stream, stream_handle) = OutputStream::try_default().unwrap();
+                    let file: BufReader<std::fs::File> =
+                        BufReader::new(File::open("tone.wav").unwrap());
+                    let source = Decoder::new(file).unwrap();
+                    // Create a sink to play the audio
+                    let sink = Sink::try_new(&stream_handle).unwrap();
+                    sink.append(source);
+                    sink.sleep_until_end();
+                    CommandMsg::Empty
                 });
             }
+            sender.spawn_oneshot_command(|| {
+                std::thread::sleep(Duration::from_millis(1000));
+                CommandMsg::Tick
+            });
         };
     }
 }
