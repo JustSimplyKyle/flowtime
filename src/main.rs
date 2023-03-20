@@ -8,6 +8,7 @@
 // use gtk::prelude::{BoxExt, ButtonExt, GtkWindowExt, OrientableExt, WidgetExt};
 pub mod time;
 pub use crate::time::Time;
+use chrono::prelude::*;
 use gtk::prelude::*;
 use relm4::*;
 use rodio::Sink;
@@ -20,7 +21,7 @@ use std::io::BufReader;
 //     gtk, Component, ComponentParts, ComponentSender, Controller, RelmApp, RelmWidgetExt,
 //     SimpleComponent,
 // };
-use std::time::Duration;
+use std::time::{Duration, SystemTime};
 // use std::io::{stdout, Write};
 // use std::thread::sleep;
 
@@ -61,6 +62,7 @@ impl Timer {
                     } else {
                         self.mode = TimerMode::Stop;
                     }
+
                     true
                 } else {
                     self.time.decrement_second();
@@ -193,6 +195,30 @@ impl Component for Timer {
             TimerMsg::ToggleBreak => match &self.mode {
                 TimerMode::Clock | TimerMode::Pause(_) | TimerMode::Stop => {
                     self.mode = TimerMode::CountDown;
+                    let stats = stats();
+                    if *CURRENT_MONTH == stats.month {
+                        confy::store(
+                            "flowtime",
+                            Some("statistics"),
+                            Stats {
+                                month: *CURRENT_MONTH,
+                                break_second: stats.break_second + self.time.get_second() / 5,
+                                work_second: stats.work_second + self.time.get_second(),
+                            },
+                        )
+                        .unwrap();
+                    } else {
+                        confy::store(
+                            "flowtime",
+                            Some("statistics"),
+                            Stats {
+                                month: *CURRENT_MONTH,
+                                break_second: self.time.get_second() / 5,
+                                work_second: self.time.get_second(),
+                            },
+                        )
+                        .unwrap();
+                    }
                     self.time.set_time_by_second(self.time.get_second() / 5);
                 }
                 _ => (),
@@ -360,6 +386,30 @@ impl SimpleComponent for SettingsModel {
         ComponentParts { model, widgets }
     }
 }
+#[derive(Debug, Clone)]
+struct StatsticsModel;
+
+#[relm4::component]
+impl SimpleComponent for StatsticsModel {
+    type Input = ();
+    type Init = ();
+    type Output = ();
+
+    view! {
+        gtk::Box {
+            set_spacing: 10,
+        }
+    }
+    fn init(
+        _params: Self::Init,
+        root: &Self::Root,
+        _sender: ComponentSender<Self>,
+    ) -> ComponentParts<Self> {
+        let model = StatsticsModel;
+        let widgets = view_output!();
+        ComponentParts { model, widgets }
+    }
+}
 
 #[derive(Debug, PartialEq)]
 enum AppMode {
@@ -404,6 +454,19 @@ impl SimpleComponent for MainApp {
                     #[watch]
                     set_visible: matches!(model.mode, AppMode::Settings),
                     model.setting.widget(),
+                },
+                gtk::Box {
+                    set_orientation: gtk::Orientation::Vertical,
+                    #[watch]
+                    set_visible: matches!(model.mode, AppMode::Statistics),
+                    gtk::Label {
+                        #[watch]
+                        set_label:    &format!("Flowtime: {}",stats().work_second),
+                    },
+                    gtk::Label {
+                        #[watch]
+                        set_label:    &format!("Break: {}",stats().break_second),
+                    }
                 }
             }
         }
@@ -449,10 +512,21 @@ struct Config {
     restart: bool,
 }
 
+#[derive(Debug, Default, Serialize, Deserialize)]
+struct Stats {
+    month: u32,
+    break_second: u32,
+    work_second: u32,
+}
+
 use lazy_static::lazy_static;
+fn stats() -> Stats {
+    confy::load("flowtime", Some("statistics")).unwrap()
+}
 
 lazy_static! {
     static ref CFG: Config = confy::load("flowtime", Some("flowtime")).unwrap();
+    static ref CURRENT_MONTH: u32 = Utc::now().month();
 }
 
 fn main() {

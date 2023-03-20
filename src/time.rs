@@ -1,8 +1,8 @@
 #[derive(Default, Debug, Clone)]
 pub struct Time {
-    pub second: u16,
-    pub minutes: u16,
-    pub hour: u16,
+    pub second: u32,
+    pub minutes: u32,
+    pub hour: u32,
 }
 
 impl Time {
@@ -53,12 +53,12 @@ impl Time {
         }
         output
     }
-    pub fn set_time_by_second(&mut self, seconds: u16) {
+    pub fn set_time_by_second(&mut self, seconds: u32) {
         self.hour = seconds / 3600;
         self.minutes = (seconds % 3600) / 60;
         self.second = seconds % 60;
     }
-    pub fn get_second(&self) -> u16 {
+    pub fn get_second(&self) -> u32 {
         self.second + self.minutes * 60 + self.hour * 3600
     }
     pub fn reset_time(&mut self) {
