@@ -1,0 +1,267 @@
+pub use crate::time::Time;
+use crate::{stats, Stats, CFG, CURRENT_MONTH};
+use std::time::Duration;
+
+use gtk::prelude::*;
+use relm4::*;
+use rodio::Sink;
+use rodio::{Decoder, OutputStream};
+
+use std::fs::File;
+use std::io::BufReader;
+
+#[derive(PartialEq, Debug, Clone)]
+pub enum TimerMode {
+    Clock,
+    CountDown,
+    Stop,
+    Pause(Box<TimerMode>),
+}
+
+#[derive(Debug)]
+pub struct Timer {
+    pub mode: TimerMode,
+    pub time: Time,
+    pub clicking: bool,
+    pub restart: bool,
+}
+impl Timer {
+    fn new() -> Timer {
+        Timer {
+            mode: TimerMode::Stop,
+            time: Default::default(),
+            clicking: false,
+            restart: CFG.restart,
+        }
+    }
+    fn tick(&mut self) -> bool {
+        match self.mode {
+            TimerMode::Clock => {
+                self.time.increment_second();
+                false
+            }
+            TimerMode::CountDown => {
+                if self.time.second == 0 && self.time.minutes == 0 && self.time.hour == 0 {
+                    if self.restart {
+                        self.mode = TimerMode::Clock;
+                    } else {
+                        self.mode = TimerMode::Stop;
+                    }
+                    true
+                } else {
+                    self.time.decrement_second();
+                    false
+                }
+            }
+            TimerMode::Stop => false,
+            TimerMode::Pause(_) => false,
+        }
+    }
+
+    fn formatted_string(&self) -> String {
+        self.time.formatted_string()
+    }
+}
+
+#[derive(Debug)]
+pub enum TimerMsg {
+    ToggleFlowTime,
+    ToggleBreak,
+    SetRestart(bool),
+}
+
+#[derive(Debug)]
+pub enum CommandMsg {
+    Tick,
+    Empty,
+}
+
+#[relm4::component(pub)]
+impl Component for Timer {
+    type Init = TimerMode;
+    type Input = TimerMsg;
+    type Output = ();
+    type CommandOutput = CommandMsg;
+
+    view! {
+        gtk::Box {
+            set_orientation: gtk::Orientation::Vertical,
+            set_valign: gtk::Align::Center,
+            set_spacing: 10,
+
+
+            gtk::Label {
+                add_css_class: "mode",
+                #[watch]
+                set_visible: !matches!(&model.mode, TimerMode::Stop),
+                #[watch]
+                set_label: match &model.mode {
+                    TimerMode::Clock => "Working Stage",
+                    TimerMode::CountDown => "Free Time!",
+                    TimerMode::Stop => "",
+                    TimerMode::Pause(x) => match **x {
+                        TimerMode::Clock => "Working Stage",
+                        TimerMode::CountDown => "Free Time!",
+                        TimerMode::Stop => "",
+                        TimerMode::Pause(_) => "",
+                    },
+                },
+            },
+
+            gtk::Label {
+                add_css_class: "clock",
+                #[watch]
+                set_label: &model.formatted_string(),
+            },
+            append = &gtk::Box {
+                set_orientation: gtk::Orientation::Horizontal,
+                set_halign: gtk::Align::Center,
+                set_spacing: 10,
+
+                gtk::Button {
+                    set_label: "Break",
+                    add_css_class: "circular",
+                    add_css_class: "break",
+                    connect_clicked => TimerMsg::ToggleBreak,
+                },
+                gtk::Button {
+                    add_css_class: "circular",
+                    add_css_class: "flowtimetoggle",
+                    #[watch]
+                    set_label: match &model.mode {
+                        TimerMode::Stop | TimerMode::Pause(_) => "",
+                        _ => "󰏤"
+                    },
+                    connect_clicked => TimerMsg::ToggleFlowTime,
+                },
+            }
+        }
+    }
+    // Initialize the UI.
+    fn init(
+        _mode: Self::Init,
+        root: &Self::Root,
+        sender: ComponentSender<Self>,
+    ) -> ComponentParts<Self> {
+        let model = Timer::new();
+        relm4::set_global_css(
+            r#"
+            .clock {
+                font-size: 40px;
+                color: rgb(153,209,219);
+            }
+            .flowtimetoggle {
+                font-size: 25px;   
+                padding: 15px;
+            }
+            .mode {
+                font-size: 15px;
+                color: rgb(153,209,219);
+            }
+            .circular {
+                color: rgb(153,209,219);
+                padding: 10px;
+            }
+            .break {
+                font-size: 20px;
+            }
+"#,
+        );
+
+        // Insert the macro code generation here
+        let widgets = view_output!();
+
+        ComponentParts { model, widgets }
+    }
+
+    fn update(&mut self, msg: Self::Input, sender: ComponentSender<Self>, _: &Self::Root) {
+        match msg {
+            TimerMsg::ToggleBreak => match &self.mode {
+                TimerMode::Clock | TimerMode::Pause(_) | TimerMode::Stop => {
+                    self.mode = TimerMode::CountDown;
+                    let stats = stats();
+                    if *CURRENT_MONTH == stats.month {
+                        confy::store(
+                            "flowtime",
+                            Some("statistics"),
+                            Stats {
+                                month: *CURRENT_MONTH,
+                                break_second: stats.break_second + self.time.get_second() / 5,
+                                work_second: stats.work_second + self.time.get_second(),
+                            },
+                        )
+                        .unwrap();
+                    } else {
+                        confy::store(
+                            "flowtime",
+                            Some("statistics"),
+                            Stats {
+                                month: *CURRENT_MONTH,
+                                break_second: self.time.get_second() / 5,
+                                work_second: self.time.get_second(),
+                            },
+                        )
+                        .unwrap();
+                    }
+                    self.time.set_time_by_second(self.time.get_second() / 5);
+                }
+                _ => (),
+            },
+            TimerMsg::ToggleFlowTime => match &self.mode {
+                TimerMode::Stop => {
+                    self.mode = TimerMode::Clock;
+                    self.time.reset_time();
+                    if !self.clicking {
+                        sender.spawn_oneshot_command(|| CommandMsg::Tick);
+                        self.clicking = true;
+                    }
+                }
+                TimerMode::Clock => {
+                    self.mode = TimerMode::Pause(Box::from(TimerMode::Clock));
+                }
+                TimerMode::CountDown => {
+                    self.mode = TimerMode::Pause(Box::from(TimerMode::CountDown));
+                }
+                TimerMode::Pause(x) => match **x {
+                    TimerMode::Clock => {
+                        self.mode = TimerMode::Clock;
+                    }
+                    TimerMode::CountDown => {
+                        self.mode = TimerMode::CountDown;
+                    }
+                    _ => unreachable!(),
+                },
+            },
+            TimerMsg::SetRestart(x) => {
+                self.restart = x;
+            }
+        }
+    }
+    fn update_cmd(
+        &mut self,
+        message: Self::CommandOutput,
+        sender: ComponentSender<Self>,
+        _root: &Self::Root,
+    ) {
+        if let CommandMsg::Tick = message {
+            // ticking logic handled by Timer
+            if self.tick() {
+                sender.spawn_oneshot_command(move || {
+                    let (_stream, stream_handle) = OutputStream::try_default().unwrap();
+                    let file: BufReader<std::fs::File> =
+                        BufReader::new(File::open("tone.wav").unwrap());
+                    let source = Decoder::new(file).unwrap();
+                    // Create a sink to play the audio
+                    let sink = Sink::try_new(&stream_handle).unwrap();
+                    sink.append(source);
+                    sink.sleep_until_end();
+                    CommandMsg::Empty
+                });
+            }
+            sender.spawn_oneshot_command(|| {
+                std::thread::sleep(Duration::from_millis(1000));
+                CommandMsg::Tick
+            });
+        };
+    }
+}
