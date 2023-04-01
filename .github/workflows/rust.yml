@@ -17,7 +17,7 @@ jobs:
     steps:
     - uses: actions/checkout@v3
     - name: Deps
-      run: apt install pango
+      run: apt-get update && apt-get install -y libpango
     - name: Build
       run: cargo build --verbose
     - name: Run tests
@@ -53,11 +53,12 @@ jobs:
 
     - uses: actions-rs/toolchain@v1
       with:
-        profile: minimal
         toolchain: stable
-
-    - name: Build
-      run: cargo build --release --locked
+        
+    - uses: actions-rs/cargo@v1
+        with:
+          command: build
+          args: --release
 
     - name: Upload binaries to release
       uses: actions/upload-artifact@v2
