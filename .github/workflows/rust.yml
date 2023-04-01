@@ -16,11 +16,13 @@ jobs:
 
     steps:
     - uses: actions/checkout@v3
+    - name: Deps
+      run: apt install pango
     - name: Build
       run: cargo build --verbose
     - name: Run tests
       run: cargo test --verbose
-      
+
   publish:
     name: Publish for ${{ matrix.os }}
     runs-on: ${{ matrix.os }}
