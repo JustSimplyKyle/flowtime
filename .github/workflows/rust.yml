@@ -56,9 +56,9 @@ jobs:
         toolchain: stable
         
     - uses: actions-rs/cargo@v1
-        with:
-          command: build
-          args: --release
+      with:
+        command: build
+        args: --release
 
     - name: Upload binaries to release
       uses: actions/upload-artifact@v2
