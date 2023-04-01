@@ -42,12 +42,12 @@ impl Time {
             output.push_str(&format!("{}:", self.hour));
         }
         if self.minutes < 10 {
-            output.push_str(format!("0{}:", self.minutes).as_str());
+            output.push_str(&format!("0{}:", self.minutes));
         } else {
             output.push_str(&format!("{}:", self.minutes));
         }
         if self.second < 10 {
-            output.push_str(format!("0{}", self.second).as_str());
+            output.push_str(&format!("0{}", self.second));
         } else {
             output.push_str(&format!("{}", self.second));
         }

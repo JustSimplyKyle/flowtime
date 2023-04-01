@@ -1,5 +1,5 @@
 pub use crate::time::Time;
-use crate::{stats, Stats, CFG, CURRENT_MONTH};
+use crate::{stat, Stats, CFG, CURRENT_MONTH};
 use std::time::Duration;
 
 use gtk::prelude::*;
@@ -128,9 +128,11 @@ impl Component for Timer {
                     add_css_class: "circular",
                     add_css_class: "flowtimetoggle",
                     #[watch]
-                    set_label: match &model.mode {
-                        TimerMode::Stop | TimerMode::Pause(_) => "",
-                        _ => "󰏤"
+                    set_icon_name: match &model.mode {
+                        TimerMode::Stop | TimerMode::Pause(_) => {
+                            "media-playback-start"
+                        },
+                        _ => "media-playback-pause"
                     },
                     connect_clicked => TimerMsg::ToggleFlowTime,
                 },
@@ -179,29 +181,41 @@ impl Component for Timer {
             TimerMsg::ToggleBreak => match &self.mode {
                 TimerMode::Clock | TimerMode::Pause(_) | TimerMode::Stop => {
                     self.mode = TimerMode::CountDown;
-                    let stats = stats();
-                    if *CURRENT_MONTH == stats.month {
-                        confy::store(
-                            "flowtime",
-                            Some("statistics"),
-                            Stats {
-                                month: *CURRENT_MONTH,
-                                break_second: stats.break_second + self.time.get_second() / 5,
-                                work_second: stats.work_second + self.time.get_second(),
-                            },
-                        )
-                        .unwrap();
-                    } else {
-                        confy::store(
-                            "flowtime",
-                            Some("statistics"),
-                            Stats {
-                                month: *CURRENT_MONTH,
-                                break_second: self.time.get_second() / 5,
-                                work_second: self.time.get_second(),
-                            },
-                        )
-                        .unwrap();
+                    let stats = stat!();
+                    for (conf_month, work_second, break_second) in stats.month_break_work.iter() {
+                        if &*CURRENT_MONTH == conf_month {
+                            confy::store(
+                                "flowtime",
+                                Some("statistics"),
+                                Stats {
+                                    month_break_work: vec![(
+                                        *conf_month,
+                                        break_second + self.time.get_second() / 5,
+                                        work_second + self.time.get_second(),
+                                    )],
+                                },
+                            )
+                            .unwrap();
+                        } else if !stats
+                            .month_break_work
+                            .iter()
+                            .all(|(month, _, _)| month == &*CURRENT_MONTH)
+                        {
+                            let mut new_struct = stats.month_break_work.clone();
+                            new_struct.push((
+                                *CURRENT_MONTH,
+                                self.time.get_second() / 5,
+                                self.time.get_second(),
+                            ));
+                            confy::store(
+                                "flowtime",
+                                Some("statistics"),
+                                Stats {
+                                    month_break_work: new_struct,
+                                },
+                            )
+                            .unwrap();
+                        }
                     }
                     self.time.set_time_by_second(self.time.get_second() / 5);
                 }

@@ -181,7 +181,6 @@ impl SimpleComponent for MainApp {
             gtk::Box {
                 set_valign: gtk::Align::Center,
                 set_halign: gtk::Align::Center,
-                set_spacing: 10,
                 gtk::Box {
                     #[watch]
                     set_visible: matches!(model.mode, AppMode::FlowTime),
@@ -193,17 +192,57 @@ impl SimpleComponent for MainApp {
                     model.setting.widget(),
                 },
                 gtk::Box {
-                    set_orientation: gtk::Orientation::Vertical,
+                    set_orientation: gtk::Orientation::Horizontal,
+                        set_spacing: 3,
                     #[watch]
                     set_visible: matches!(model.mode, AppMode::Statistics),
-                    gtk::Label {
-                        #[watch]
-                        set_label:    &format!("{:?}",second_to_formatted(stats().work_second)),
+
+                    gtk::Box {
+                        gtk::Label {
+                            set_label: "Work"
+                        },
+                        add_css_class: "statcircle",
+                        set_orientation: gtk::Orientation::Vertical,
+                        set_valign: gtk::Align::Center,
+                        gtk::Label {
+                            #[watch]
+                            set_label:    &second_to_formatted(current_stat(*CURRENT_MONTH).2),
+                        },
+                        gtk::Label {
+                            #[watch]
+                            set_label:
+                                if current_stat(*CURRENT_MONTH).2 < 60 {
+                                    "second"
+                                } else if current_stat(*CURRENT_MONTH).2 < 3600 {
+                                    "minute"
+                                } else {
+                                    "hour"
+                                }
+                        },
                     },
-                    gtk::Label {
-                        #[watch]
-                        set_label:    &format!("{:?}",&second_to_formatted(stats().break_second)),
-                    }
+                    gtk::Box {
+                        add_css_class: "statcircle",
+                        set_orientation: gtk::Orientation::Vertical,
+                        set_valign: gtk::Align::Center,
+                        gtk::Label {
+                            set_label: "Break"
+                        },
+                        gtk::Label {
+                            #[watch]
+                            set_label:    &second_to_formatted(current_stat(*CURRENT_MONTH).1)
+                        },
+                        gtk::Label {
+                            #[watch]
+                            set_label:
+                                if current_stat(*CURRENT_MONTH).1 < 60 {
+                                    "second"
+                                } else if current_stat(*CURRENT_MONTH).1 < 3600 {
+                                    "minute"
+                                } else {
+                                    "hour"
+                                }
+                        },
+                    },
                 }
             }
         }
@@ -231,6 +270,18 @@ impl SimpleComponent for MainApp {
                 }),
         };
         let widgets = view_output!();
+        relm4::set_global_css(
+            r#"
+            .statcircle {
+              border-width: 8px;
+              border-color: @accent_color;
+              border-style: inset dotted;
+              border-radius: 100%;
+              box-shadow: 0px 1px 6px rgba(0, 0, 0, 0.07);
+              padding: 100px;
+            }
+            "#,
+        );
         ComponentParts { model, widgets }
     }
     fn update(&mut self, msg: Self::Input, _sender: ComponentSender<Self>) {
@@ -249,19 +300,87 @@ struct Config {
     restart: bool,
 }
 
-#[derive(Debug, Default, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize)]
 struct Stats {
-    month: u32,
-    break_second: u32,
-    work_second: u32,
+    month_break_work: Vec<(u32, u32, u32)>,
+}
+
+impl std::default::Default for Stats {
+    fn default() -> Self {
+        Self {
+            month_break_work: vec![(*CURRENT_MONTH, 0, 0)],
+        }
+    }
 }
 
 use lazy_static::lazy_static;
-fn stats() -> Stats {
-    confy::load("flowtime", Some("statistics")).unwrap()
+
+fn current_stat(month: u32) -> (u32, u32, u32) {
+    let mut new_struct = stat!().month_break_work.clone();
+    new_struct.push((*CURRENT_MONTH, 0, 0));
+    match stat!()
+        .month_break_work
+        .iter()
+        .filter(|(m, _, _)| m == &month)
+        .nth(0)
+    {
+        Some(x) => *x,
+        None => {
+            confy::store(
+                "flowtime",
+                Some("statistics"),
+                Stats {
+                    month_break_work: new_struct,
+                },
+            )
+            .unwrap();
+            (*CURRENT_MONTH, 0, 0)
+        }
+    }
 }
-fn second_to_formatted(t: u32) -> (u32, u32, u32) {
-    (t / 3600, (t % 3600) / 60, t % 60)
+#[macro_export]
+macro_rules! stat {
+    () => {
+        confy::load::<Stats>("flowtime", Some("statistics")).unwrap()
+    };
+}
+
+fn second_to_formatted(t: u32) -> String {
+    let (hour, minute, second) = (t / 3600, (t % 3600) / 60, t % 60);
+    let mut output = String::new();
+
+    if t < 60 {
+        format!("{}", second)
+    } else if t < 3600 {
+        if minute < 10 {
+            output.push_str(&format!("0{}:", minute));
+        } else {
+            output.push_str(&format!("{}:", minute));
+        }
+        if second < 10 {
+            output.push_str(&format!("0{}", second));
+        } else {
+            output.push_str(&format!("{}", second));
+        }
+        output
+    } else {
+        if hour < 10 {
+            output.push_str(&format!("0{}:", hour));
+        } else {
+            output.push_str(&format!("{}:", hour));
+        }
+        if minute < 10 {
+            output.push_str(&format!("0{}:", minute));
+        } else {
+            output.push_str(&format!("{}:", minute));
+        }
+        if second < 10 {
+            output.push_str(&format!("0{}", second));
+        } else {
+            output.push_str(&format!("{}", second));
+        }
+        output
+    }
 }
 
 lazy_static! {
