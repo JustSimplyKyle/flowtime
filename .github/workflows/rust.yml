@@ -16,7 +16,7 @@ jobs:
     steps:
     - uses: actions/checkout@v2
     - name: Install dependencies
-      run: sudo apt install -y pkg-config libpango-1.0-dev libgraphene-1.0-dev librust-glib-sys-dev
+      run: sudo apt install -y pkg-config libpango1.0-dev libgraphene-1.0-dev librust-glib-sys-dev
     - name: Install cross
       run: curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y && rustup target add x86_64-unknown-linux-musl x86_64-pc-windows-gnu x86_64-apple-darwin
     - name: Build
@@ -30,7 +30,6 @@ jobs:
       matrix:
         os: [ubuntu-latest, macos-latest, windows-latest]
         target: ["x86_64-unknown-linux-musl", "x86_64-apple-darwin", "x86_64-pc-windows-gnu"]
-        parallelism: [3]
 
     outputs:
       binaries: ${{ steps.build.outputs.binaries }}
