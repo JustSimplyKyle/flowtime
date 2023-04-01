@@ -10,58 +10,98 @@ env:
   CARGO_TERM_COLOR: always
 
 jobs:
-  build:
-
+  build-linux:
     runs-on: ubuntu-latest
-
     steps:
-    - uses: actions/checkout@v3
+    - uses: actions/checkout@v2
     - name: Deps
-      run: sudo apt-get update && sudo apt-get install -y libpango1.0-dev
-    - name: Build
-      run: cargo build --verbose
+      run: sudo apt-get update && sudo apt-get install -y libpango1.0-dev libgraphene-1.0-dev
+    - name: Install cross
+      run: cargo install cross
+    - name: Build for Linux
+      run: cross build --target x86_64-unknown-linux-gnu --release
     - name: Run tests
       run: cargo test --verbose
 
-  publish:
-    name: Publish for ${{ matrix.os }}
-    runs-on: ${{ matrix.os }}
-    strategy:
-      matrix:
-        name: [
-            linux,
-            windows,
-            macos
-        ]
-
-        include:
-          - name: linux
-            os: ubuntu-latest
-            artifact_name: target/release/flowtime
-            asset_name: flowtime-linux
-          - name: windows
-            os: windows-latest
-            artifact_name: target/release/flowtime.exe
-            asset_name: flowtime-windows
-          - name: macos
-            os: macos-latest
-            artifact_name: target/release/flowtime
-            asset_name: flowtime-macos
-
+  build-windows:
+    runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@v1
+    - uses: actions/checkout@v2
+    - name: Deps
+      run: sudo apt-get update && sudo apt-get install -y libpango1.0-dev libgraphene-1.0-dev
+    - name: Install cross
+      run: cargo install cross
+    - name: Build for Windows
+      run: cross build --target x86_64-pc-windows-gnu --release
+    - name: Run tests
+      run: cargo test --verbose
 
+  build-macos:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v2
+    - name: Deps
+      run: sudo apt-get update && sudo apt-get install -y libpango1.0-dev libgraphene-1.0-dev
+    - name: Install cross
+      run: cargo install cross
+    - name: Build for macOS
+      run: cross build --target x86_64-apple-darwin --release
+    - name: Run tests
+      run: cargo test --verbose
+
+  publish-linux:
+    needs: [build-linux]
+    name: Publish for Linux
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v2
     - uses: actions-rs/toolchain@v1
       with:
         toolchain: stable
-        
     - uses: actions-rs/cargo@v1
       with:
         command: build
         args: --release
-
-    - name: Upload binaries to release
+    - name: Upload binary to release
       uses: actions/upload-artifact@v2
       with:
-        name: ${{ matrix.asset_name }}
-        path: ${{ matrix.artifact_name }}
+        name: flowtime-linux
+        path: target/release/flowtime
+
+  publish-windows:
+    needs: [build-windows]
+    name: Publish for Windows
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v2
+    - uses: actions-rs/toolchain@v1
+      with:
+        toolchain: stable
+    - uses: actions-rs/cargo@v1
+      with:
+        command: build
+        args: --release --target x86_64-pc-windows-gnu
+    - name: Upload binary to release
+      uses: actions/upload-artifact@v2
+      with:
+        name: flowtime-windows
+        path: target/release/flowtime.exe
+
+  publish-macos:
+    needs: [build-macos]
+    name: Publish for macOS
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v2
+    - uses: actions-rs/toolchain@v1
+      with:
+        toolchain: stable
+    - uses: actions-rs/cargo@v1
+      with:
+        command: build
+        args: --release --target x86_64-pc-windows-gnu
+    - name: Upload binary to release
+      uses: actions/upload-artifact@v2
+      with:
+        name: flowtime-macos
+        path: target/release/flowtime
