@@ -16,7 +16,7 @@ jobs:
     steps:
     - uses: actions/checkout@v2
     - name: Install dependencies
-      run: sudo apt update && sudo apt install -y pkg-config libpango1.0-dev libgraphene-1.0-dev librust-glib-sys-dev libgtk-4-dev libadwaita-1-dev libasound2-dev portaudio19-dev build-essential ubuntustudio-audio-core librust-glib-sys-dev --fix-missing 
+      run: sudo apt update && sudo apt install -y pkg-config libpango1.0-dev libgraphene-1.0-dev librust-glib-sys-dev libgtk-4-dev libadwaita-1-dev libasound2-dev portaudio19-dev build-essential ubuntustudio-audio-core librust-glib-sys-dev libglib2.0-dev --fix-missing 
     - uses: actions-rs/toolchain@v1
       with:
         toolchain: stable
