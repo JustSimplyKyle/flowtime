@@ -31,7 +31,7 @@ jobs:
     strategy:
       matrix:
         os: [ubuntu-latest]
-        target: ["x86_64-unknown-linux-musl", "x86_64-pc-windows-msvc"]
+        target: ["x86_64-unknown-linux-musl", "x86_64-pc-windows-gnu"]
       max-parallel: 2
 
     outputs:
