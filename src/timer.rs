@@ -182,7 +182,7 @@ impl Component for Timer {
                 TimerMode::Clock | TimerMode::Pause(_) | TimerMode::Stop => {
                     self.mode = TimerMode::CountDown;
                     let stats = stat!();
-                    for (conf_month, work_second, break_second) in stats.month_break_work.iter() {
+                    for (conf_month, break_second, work_second) in stats.month_break_work.iter() {
                         if &*CURRENT_MONTH == conf_month {
                             confy::store(
                                 "flowtime",
