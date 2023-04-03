@@ -75,7 +75,7 @@ struct SettingsModel;
 
 #[derive(Debug)]
 enum SettingsMsg {
-    AutoRestart(bool),
+    SaveReset(bool),
 }
 
 #[relm4::component]
@@ -86,23 +86,38 @@ impl SimpleComponent for SettingsModel {
 
     view! {
         gtk::Box {
+            set_orientation: gtk::Orientation::Vertical,
             set_spacing: 10,
-            gtk::Switch {
-                set_active: CFG.restart,
-                connect_state_notify => move |switch| {
-                confy::store("flowtime", Some("flowtime"), Config { restart: switch.is_active() }).unwrap();
-                    sender.output(SettingsMsg::AutoRestart(switch.is_active())).unwrap();
+            gtk::Box {
+                set_spacing: 10,
+                gtk::Switch {
+                    set_active: cfg!().restart,
+                    connect_state_notify => move |switch| {
+                    confy::store("flowtime", Some("flowtime"), Config { restart: switch.is_active(), reset_save: cfg!().reset_save }).unwrap();
+                    },
                 },
+                gtk::Label {
+                    set_label: "Auto start Flowtime session after the break has ended."
+                }
             },
-            gtk::Label {
-                set_label: "Auto start Flowtime session after the break has ended."
+            gtk::Box {
+                set_spacing: 10,
+                gtk::Switch {
+                    set_active: cfg!().reset_save,
+                    connect_state_notify => move |switch| {
+                    confy::store("flowtime", Some("flowtime"), Config { restart: cfg!().restart,reset_save: switch.is_active() }).unwrap();
+                    },
+                },
+                gtk::Label {
+                    set_label: "Save the current work time to statistics when reset is pressed"
+                }
             }
         }
     }
     fn init(
         _params: Self::Init,
         root: &Self::Root,
-        sender: ComponentSender<Self>,
+        _sender: ComponentSender<Self>,
     ) -> ComponentParts<Self> {
         let model = SettingsModel;
         let widgets = view_output!();
@@ -144,7 +159,6 @@ enum AppMode {
 #[derive(Debug)]
 enum MainAppMsg {
     SetMode(AppMode),
-    SetRestart(bool),
 }
 
 struct MainApp {
@@ -249,11 +263,7 @@ impl SimpleComponent for MainApp {
                 },
             ),
             main: Timer::builder().launch(TimerMode::Stop).detach(),
-            setting: SettingsModel::builder()
-                .launch(())
-                .forward(sender.input_sender(), |msg| match msg {
-                    SettingsMsg::AutoRestart(x) => MainAppMsg::SetRestart(x),
-                }),
+            setting: SettingsModel::builder().launch(()).detach(),
         };
         let widgets = view_output!();
         relm4::set_global_css(
@@ -275,15 +285,23 @@ impl SimpleComponent for MainApp {
             MainAppMsg::SetMode(mode) => {
                 self.mode = mode;
             }
-            MainAppMsg::SetRestart(x) => self.main.sender().send(TimerMsg::SetRestart(x)).unwrap(),
         }
     }
 }
 
 use serde_derive::{Deserialize, Serialize};
-#[derive(Default, Serialize, Deserialize)]
+#[derive(Serialize, Deserialize)]
 struct Config {
     restart: bool,
+    reset_save: bool,
+}
+impl std::default::Default for Config {
+    fn default() -> Self {
+        Self {
+            restart: false,
+            reset_save: true,
+        }
+    }
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -331,6 +349,13 @@ macro_rules! stat {
     };
 }
 
+#[macro_export]
+macro_rules! cfg {
+    () => {
+        confy::load::<Config>("flowtime", Some("flowtime")).unwrap()
+    };
+}
+
 fn second_to_formatted(t: u32) -> String {
     let (hour, minute, second) = (t / 3600, (t % 3600) / 60, t % 60);
     let mut output = String::new();
@@ -370,7 +395,6 @@ fn second_to_formatted(t: u32) -> String {
 }
 
 lazy_static! {
-    static ref CFG: Config = confy::load("flowtime", Some("flowtime")).unwrap();
     static ref CURRENT_MONTH: u32 = Utc::now().month();
 }
 

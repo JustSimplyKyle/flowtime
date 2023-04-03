@@ -1,5 +1,5 @@
 pub use crate::time::Time;
-use crate::{stat, Stats, CFG, CURRENT_MONTH};
+use crate::{cfg, stat, Config, Stats, CURRENT_MONTH};
 use std::time::Duration;
 
 use gtk::prelude::*;
@@ -23,7 +23,6 @@ pub struct Timer {
     pub mode: TimerMode,
     pub time: Time,
     pub clicking: bool,
-    pub restart: bool,
 }
 impl Timer {
     fn new() -> Timer {
@@ -31,7 +30,6 @@ impl Timer {
             mode: TimerMode::Stop,
             time: Default::default(),
             clicking: false,
-            restart: CFG.restart,
         }
     }
     fn tick(&mut self) -> bool {
@@ -46,7 +44,7 @@ impl Timer {
                     && self.time.hour == 0
                     && self.mode != TimerMode::Clock
                 {
-                    if self.restart {
+                    if cfg!().restart {
                         self.mode = TimerMode::Clock;
                     } else {
                         self.mode = TimerMode::Stop;
@@ -72,7 +70,6 @@ pub enum TimerMsg {
     ToggleFlowTime,
     ToggleBreak,
     ResetSession,
-    SetRestart(bool),
 }
 
 #[derive(Debug)]
@@ -272,15 +269,24 @@ impl Component for Timer {
                     _ => unreachable!(),
                 },
             },
-            TimerMsg::SetRestart(x) => self.restart = x,
             TimerMsg::ResetSession => {
                 for (month, break_time, work) in stat!().month_break_work.iter() {
                     if *CURRENT_MONTH == *month {
                         if self.mode == TimerMode::CountDown {
                             self.mode = TimerMode::Clock;
-                            update_statistics(self, Some((break_time - self.time.second, *work)));
+                            if cfg!().reset_save {
+                                update_statistics(
+                                    self,
+                                    Some((break_time - self.time.second, *work)),
+                                );
+                            }
                         } else if self.mode == TimerMode::Clock {
-                            update_statistics(self, Some((*break_time, work + self.time.second)));
+                            if cfg!().reset_save {
+                                update_statistics(
+                                    self,
+                                    Some((*break_time, work + self.time.second)),
+                                );
+                            }
                         }
                     }
                 }
