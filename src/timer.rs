@@ -41,7 +41,11 @@ impl Timer {
                 false
             }
             TimerMode::CountDown => {
-                if self.time.second == 0 && self.time.minutes == 0 && self.time.hour == 0 {
+                if self.time.second == 0
+                    && self.time.minutes == 0
+                    && self.time.hour == 0
+                    && self.mode != TimerMode::Clock
+                {
                     if self.restart {
                         self.mode = TimerMode::Clock;
                     } else {
@@ -67,6 +71,7 @@ impl Timer {
 pub enum TimerMsg {
     ToggleFlowTime,
     ToggleBreak,
+    ResetSession,
     SetRestart(bool),
 }
 
@@ -74,6 +79,53 @@ pub enum TimerMsg {
 pub enum CommandMsg {
     Tick,
     Empty,
+}
+
+fn update_statistics(timer: &mut Timer, save_time: Option<(u32, u32)>) {
+    let stats = stat!();
+    for (conf_month, break_second, work_second) in stats.month_break_work.iter() {
+        if &*CURRENT_MONTH == conf_month {
+            confy::store(
+                "flowtime",
+                Some("statistics"),
+                Stats {
+                    month_break_work: vec![(
+                        *conf_month,
+                        save_time
+                            .unwrap_or((break_second + timer.time.get_second() / 5, 0))
+                            .0,
+                        save_time
+                            .unwrap_or((0, work_second + timer.time.get_second()))
+                            .1,
+                    )],
+                },
+            )
+            .unwrap();
+        } else if !stats
+            .month_break_work
+            .iter()
+            .all(|(month, _, _)| month == &*CURRENT_MONTH)
+        {
+            let mut new_struct = stats.month_break_work.clone();
+            new_struct.push((
+                *CURRENT_MONTH,
+                save_time
+                    .unwrap_or((break_second + timer.time.get_second() / 5, 0))
+                    .0,
+                save_time
+                    .unwrap_or((0, work_second + timer.time.get_second()))
+                    .1,
+            ));
+            confy::store(
+                "flowtime",
+                Some("statistics"),
+                Stats {
+                    month_break_work: new_struct,
+                },
+            )
+            .unwrap();
+        }
+    }
 }
 
 #[relm4::component(pub)]
@@ -113,7 +165,7 @@ impl Component for Timer {
                 #[watch]
                 set_label: &model.formatted_string(),
             },
-            append = &gtk::Box {
+            gtk::Box {
                 set_orientation: gtk::Orientation::Horizontal,
                 set_halign: gtk::Align::Center,
                 set_spacing: 10,
@@ -136,6 +188,12 @@ impl Component for Timer {
                     },
                     connect_clicked => TimerMsg::ToggleFlowTime,
                 },
+                gtk::Button {
+                    add_css_class: "reset",
+                    add_css_class: "circular",
+                    set_label: "󰜉",
+                    connect_clicked => TimerMsg::ResetSession,
+                }
             }
         }
     }
@@ -151,6 +209,9 @@ impl Component for Timer {
             .clock {
                 font-size: 40px;
                 color: rgb(153,209,219);
+            }
+            .reset {
+                font-size: 25px;
             }
             .flowtimetoggle {
                 font-size: 25px;   
@@ -181,42 +242,7 @@ impl Component for Timer {
             TimerMsg::ToggleBreak => match &self.mode {
                 TimerMode::Clock | TimerMode::Pause(_) | TimerMode::Stop => {
                     self.mode = TimerMode::CountDown;
-                    let stats = stat!();
-                    for (conf_month, break_second, work_second) in stats.month_break_work.iter() {
-                        if &*CURRENT_MONTH == conf_month {
-                            confy::store(
-                                "flowtime",
-                                Some("statistics"),
-                                Stats {
-                                    month_break_work: vec![(
-                                        *conf_month,
-                                        break_second + self.time.get_second() / 5,
-                                        work_second + self.time.get_second(),
-                                    )],
-                                },
-                            )
-                            .unwrap();
-                        } else if !stats
-                            .month_break_work
-                            .iter()
-                            .all(|(month, _, _)| month == &*CURRENT_MONTH)
-                        {
-                            let mut new_struct = stats.month_break_work.clone();
-                            new_struct.push((
-                                *CURRENT_MONTH,
-                                self.time.get_second() / 5,
-                                self.time.get_second(),
-                            ));
-                            confy::store(
-                                "flowtime",
-                                Some("statistics"),
-                                Stats {
-                                    month_break_work: new_struct,
-                                },
-                            )
-                            .unwrap();
-                        }
-                    }
+                    update_statistics(self, None);
                     self.time.set_time_by_second(self.time.get_second() / 5);
                 }
                 _ => (),
@@ -246,8 +272,19 @@ impl Component for Timer {
                     _ => unreachable!(),
                 },
             },
-            TimerMsg::SetRestart(x) => {
-                self.restart = x;
+            TimerMsg::SetRestart(x) => self.restart = x,
+            TimerMsg::ResetSession => {
+                for (month, break_time, work) in stat!().month_break_work.iter() {
+                    if *CURRENT_MONTH == *month {
+                        if self.mode == TimerMode::CountDown {
+                            self.mode = TimerMode::Clock;
+                            update_statistics(self, Some((break_time - self.time.second, *work)));
+                        } else if self.mode == TimerMode::Clock {
+                            update_statistics(self, Some((*break_time, work + self.time.second)));
+                        }
+                    }
+                }
+                self.time.reset_time();
             }
         }
     }

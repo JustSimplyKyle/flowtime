@@ -1,11 +1,3 @@
-// use crossterm::{
-//     cursor,
-//     event::{self, Event},
-//     execute,
-//     terminal::{Clear, ClearType},
-//     QueueableCommand,
-// };
-// use gtk::prelude::{BoxExt, ButtonExt, GtkWindowExt, OrientableExt, WidgetExt};
 pub mod time;
 pub use crate::time::Time;
 pub mod timer;
@@ -14,12 +6,6 @@ use chrono::prelude::*;
 use gtk::prelude::*;
 use relm4::*;
 
-// use relm4::{
-//     gtk, Component, ComponentParts, ComponentSender, Controller, RelmApp, RelmWidgetExt,
-//     SimpleComponent,
-// };
-// use std::io::{stdout, Write};
-// use std::thread::sleep;
 struct HeaderModel;
 #[derive(Debug)]
 enum HeaderOutput {
